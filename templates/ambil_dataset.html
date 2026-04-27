@@ -7,7 +7,6 @@
       <div class="card shadow-lg mb-4 bg-dark">
         <div class="card-body p-1">
           <video id="video-webcam" autoplay playsinline width="100%"></video>
-
           <canvas id="canvas-foto" style="display: none"></canvas>
         </div>
       </div>
@@ -65,9 +64,7 @@
       alert("Harap izinkan akses kamera di browser!");
     });
 
-  // Pakai tanda kutip agar aman
   let userId = parseInt("{{ user_id }}");
-
   let totalFoto = 0;
   let countSesi = 0; // Target 20 per sesi
 
@@ -83,43 +80,38 @@
     let config = sesiList[nomorSesi - 1];
     document.getElementById("instruksi").innerText = "MEREKAM: " + config.text;
 
-    // Matikan tombol biar gak diklik dobel
     document.getElementById("btn-container").innerHTML =
       '<button class="btn btn-secondary disabled w-100">Sedang Merekam...</button>';
 
     countSesi = 0;
-
-    // Mulai proses rekursif
     ambilSatuFoto(nomorSesi);
   }
 
   function ambilSatuFoto(nomorSesi) {
-    // 1. Cek kondisi berhenti agar tidak loop terus menerus
     if (countSesi >= 20) {
       siapkanSesiBerikutnya(nomorSesi);
       return;
     }
 
-    // 2. PENGECEKAN KAMERA SIAP (Mencegah gambar hitam/kosong terkirim)
     if (video.videoWidth === 0 || video.videoHeight === 0) {
       document.getElementById("status").innerText =
         "Menunggu kamera siap/fokus...";
-      setTimeout(() => ambilSatuFoto(nomorSesi), 500); // Coba lagi dalam setengah detik
+      setTimeout(() => ambilSatuFoto(nomorSesi), 500);
       return;
     }
 
-    // 3. Naikkan counter gambar agar nama file tidak tertimpa
     totalFoto++;
 
     const canvas = document.getElementById("canvas-foto");
     const context = canvas.getContext("2d");
 
-    // Ambil ukuran asli dari video stream
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    const imageData = canvas.toDataURL("image/jpeg");
+    // MENGHAPUS HEADER BASE64 SEBELUM DIKIRIM KE PYTHON
+    const rawData = canvas.toDataURL("image/jpeg");
+    const imageData = rawData.split(",")[1];
 
     fetch("/api/simpan_frame_base64", {
       method: "POST",
@@ -138,18 +130,19 @@
           document.getElementById("status").innerText =
             "Foto tersimpan: " + countSesi + "/20 (Total: " + totalFoto + ")";
 
+          // Jeda sedikit lebih lama (500ms) agar server aman
           setTimeout(() => {
             ambilSatuFoto(nomorSesi);
-          }, 200);
+          }, 500);
         } else {
-          // Gagal deteksi wajah, totalFoto diturunkan lagi biar penomoran pas
           totalFoto--;
           document.getElementById("status").innerText =
             "Mencari wajah... (Pastikan wajah di kotak terang)";
 
+          // Jeda diperlama jadi 1.5 detik jika error, agar server tidak spamming error
           setTimeout(() => {
             ambilSatuFoto(nomorSesi);
-          }, 100);
+          }, 1500);
         }
       })
       .catch((err) => {
@@ -157,7 +150,7 @@
         totalFoto--;
         setTimeout(() => {
           ambilSatuFoto(nomorSesi);
-        }, 500);
+        }, 1500);
       });
   }
 

@@ -89,64 +89,55 @@ def hitung_jarak(lat1, lon1, lat2, lon2):
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     return R * c
 
-
-# --- FITUR DATASET WEB ---
 @app.route('/api/simpan_frame_base64', methods=['POST'])
 def simpan_frame_base64():
-    data = request.json
-    user_id = data.get('user_id')
-    urutan = data.get('urutan')
-    image_data = data.get('image')
-
-    if not image_data:
-        return jsonify({'status': 'error', 'pesan': 'Tidak ada gambar dari client'})
-
     try:
-        # 1. Decode base64
-        encoded_data = image_data.split(',')[1]
-        nparr = np.frombuffer(base64.b64decode(encoded_data), np.uint8)
-        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        data = request.json
+        user_id = data.get('user_id')
+        urutan = data.get('urutan')
+        image_b64 = data.get('image')
 
-        # Cek apakah gambar berhasil di-decode
-        if frame is None:
-            return jsonify({'status': 'error', 'pesan': 'Gagal decode gambar base64 jadi array BGR'})
+        if not image_b64:
+            return jsonify({"status": "error", "pesan": "Gambar kosong dari frontend."}), 400
 
-        # 2. Setup OpenCV Cascade
-        cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-        face_cascade = cv2.CascadeClassifier(cascade_path)
+        # 1. Decode string Base64 ke dalam bentuk bytes
+        image_bytes = base64.b64decode(image_b64)
+
+        # 2. Convert bytes tersebut menjadi NumPy array (tipe unsigned int 8-bit)
+        image_array = np.frombuffer(image_bytes, dtype=np.uint8)
+
+        # 3. Decode NumPy array menjadi matriks gambar untuk OpenCV (BGR format)
+        img = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+
+        if img is None:
+            return jsonify({"status": "error", "pesan": "Gagal membaca format gambar."}), 400
+
+        # --- PROSES DETEKSI WAJAH ---
+        # (Pastikan path xml HaarCascade ini sesuai dengan lokasi file di komputermu)
+        face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
         
-        # Cek apakah file xml haarcascade benar-benar ada di dalam Docker
-        if face_cascade.empty():
-            return jsonify({'status': 'error', 'pesan': 'File Haarcascade XML tidak ditemukan di VPS!'})
-    
-        # 3. Deteksi Wajah
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.3, minNeighbors=5)
+        # Konversi gambar ke grayscale untuk mempercepat deteksi
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        
+        # Deteksi wajah
+        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(50, 50))
 
         if len(faces) == 0:
-            return jsonify({'status': 'error', 'pesan': 'Wajah tidak ditemukan'})
+            return jsonify({"status": "error", "pesan": "Wajah tidak ditemukan"})
 
-        # 4. Potong dan Simpan
-        for (x, y, w, h) in faces:
-            wajah_crop = gray[y:y+h, x:x+w]
-            folder_path = f"dataset/{user_id}"
-            
-            # Buat folder jika belum ada
-            os.makedirs(folder_path, exist_ok=True)
-            
-            file_name = f"{folder_path}/User.{user_id}.{urutan}.jpg"
-            cv2.imwrite(file_name, wajah_crop)
-            break 
+        # --- PROSES SIMPAN FOTO ---
+        # Jika wajah ketemu, simpan gambarnya ke dalam folder dataset
+        folder_path = f"static/dataset/user_{user_id}"
+        os.makedirs(folder_path, exist_ok=True) # Buat folder otomatis jika belum ada
+        
+        file_path = f"{folder_path}/img_{urutan}.jpg"
+        cv2.imwrite(file_path, img)
 
-        return jsonify({'status': 'success', 'pesan': 'Foto berhasil disimpan'})
+        return jsonify({"status": "success", "pesan": "Foto berhasil disimpan"})
 
     except Exception as e:
-        # Cetak error penuh ke log Docker secara instan
-        print(traceback.format_exc(), flush=True) 
-        
-        # Kirim error aslinya ke browser biar langsung ketahuan biang keroknya
-        return jsonify({'status': 'error', 'pesan': f'Error System: {str(e)}'})
-        
+        print(f"Error Backend: {e}")
+        return jsonify({"status": "error", "pesan": str(e)}), 500
         
 @app.route('/admin/ambil_dataset/<int:user_id>')
 def view_ambil_dataset(user_id):
