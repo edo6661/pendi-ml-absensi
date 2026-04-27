@@ -177,15 +177,19 @@ def simpan_frame():
             return jsonify({'status': 'error', 'pesan': 'Wajah tidak terdeteksi'})
     else:
         return jsonify({'status': 'error', 'pesan': 'Kamera belum siap'})
-
-# --- FITUR TRAINING WEB ---
 @app.route('/admin/train_model')
 def train_model_web():
-    if 'user_id' not in session or session['role'] != 'Admin': return redirect(url_for('index'))
+    if 'user_id' not in session or session['role'] != 'Admin': 
+        return redirect(url_for('index'))
     
-    # LOGIKA TRAINING (Copas dari latih_wajah.py tapi versi function)
+    # 1. Pastikan folder dataset ada
     path = 'dataset'
-    if not os.path.exists(path): os.makedirs(path)
+    if not os.path.exists(path): 
+        os.makedirs(path, exist_ok=True)
+        
+    # 2. PASTIKAN FOLDER 'trainer' ADA SEBELUM MENYIMPAN MODEL! (Ini kunci errornya)
+    if not os.path.exists('trainer'):
+        os.makedirs('trainer', exist_ok=True)
     
     imagePaths = [os.path.join(path, f) for f in os.listdir(path)]
     faceSamples = []
@@ -193,23 +197,34 @@ def train_model_web():
     
     for imagePath in imagePaths:
         try:
+            # Lewati file yang bukan gambar (misal ada file hidden seperti .DS_Store)
+            if not imagePath.lower().endswith(('.png', '.jpg', '.jpeg')):
+                continue
+                
             PIL_img = Image.open(imagePath).convert('L')
             img_numpy = np.array(PIL_img, 'uint8')
+            
+            # Mengambil ID dari nama file (Format harus: nama.id.jpg / img.1.jpg)
             id = int(os.path.split(imagePath)[-1].split(".")[1])
+            
             faces = face_detector.detectMultiScale(img_numpy)
             for (x, y, w, h) in faces:
                 faceSamples.append(img_numpy[y:y+h, x:x+w])
                 ids.append(id)
-        except: pass
+        except Exception as e: 
+            print(f"Skipping {imagePath} karena error: {e}")
+            pass
             
     if len(ids) > 0:
         recognizer.train(faceSamples, np.array(ids))
+        # 3. Simpan ke folder trainer yang sudah dijamin ada
         recognizer.write('trainer/trainer.yml')
         flash(f'Training Selesai! {len(np.unique(ids))} User telah dipelajari.', 'success')
     else:
-        flash('Data dataset kosong! Tidak bisa training.', 'danger')
+        flash('Data dataset kosong atau format nama file salah! Tidak bisa training.', 'danger')
         
     return redirect(url_for('kelola_users'))
+    
 
 # --- ROUTES AUTHENTICATION (LOGIN/LOGOUT) ---
 
