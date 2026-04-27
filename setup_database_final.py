@@ -5,7 +5,7 @@ from psycopg2 import sql
 DB_NAME = "skripsi_db"
 DB_USER = "postgres"
 DB_PASS = "12345"       
-DB_HOST = "localhost"
+DB_HOST = "db" # <-- Ubah baris ini menjadi 'db'
 
 def create_tables():
     commands = (
