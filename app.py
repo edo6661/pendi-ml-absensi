@@ -88,7 +88,6 @@ def hitung_jarak(lat1, lon1, lat2, lon2):
     return R * c
 
 # --- FITUR DATASET WEB ---
-
 @app.route('/api/simpan_frame_base64', methods=['POST'])
 def simpan_frame_base64():
     data = request.json
@@ -100,42 +99,51 @@ def simpan_frame_base64():
         return jsonify({'status': 'error', 'pesan': 'Tidak ada gambar dari client'})
 
     try:
-        # 1. Pisahkan header base64 (contoh: "data:image/jpeg;base64,/9j/4AAQ...")
+        # 1. Decode base64
         encoded_data = image_data.split(',')[1]
-        
-        # 2. Decode base64 menjadi array numpy
         nparr = np.frombuffer(base64.b64decode(encoded_data), np.uint8)
-        
-        # 3. Ubah array numpy menjadi format gambar OpenCV (BGR)
         frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
-        # 4. Deteksi Wajah (Pastikan path haarcascade sesuai dengan foldermu)
-        face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+        # Cek apakah gambar berhasil di-decode
+        if frame is None:
+            return jsonify({'status': 'error', 'pesan': 'Gagal decode gambar base64 jadi array BGR'})
+
+        # 2. Setup OpenCV Cascade
+        cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+        face_cascade = cv2.CascadeClassifier(cascade_path)
+        
+        # Cek apakah file xml haarcascade benar-benar ada di dalam Docker
+        if face_cascade.empty():
+            return jsonify({'status': 'error', 'pesan': 'File Haarcascade XML tidak ditemukan di VPS!'})
+
+        # 3. Deteksi Wajah
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         faces = face_cascade.detectMultiScale(gray, scaleFactor=1.3, minNeighbors=5)
 
         if len(faces) == 0:
             return jsonify({'status': 'error', 'pesan': 'Wajah tidak ditemukan'})
 
-        # 5. Jika wajah ketemu, crop dan simpan dataset
+        # 4. Potong dan Simpan
         for (x, y, w, h) in faces:
             wajah_crop = gray[y:y+h, x:x+w]
+            folder_path = f"dataset/{user_id}"
             
-            # Tentukan folder dataset
-            folder_path = f"dataset/{user_id}" # Sesuaikan dengan nama folder dataset kamu
+            # Buat folder jika belum ada
             os.makedirs(folder_path, exist_ok=True)
             
-            # Simpan file gambar
             file_name = f"{folder_path}/User.{user_id}.{urutan}.jpg"
             cv2.imwrite(file_name, wajah_crop)
-            break # Cukup ambil 1 wajah pertama yang terdeteksi
+            break 
 
         return jsonify({'status': 'success', 'pesan': 'Foto berhasil disimpan'})
 
     except Exception as e:
-        print("Error saving base64 image:", str(e))
-        return jsonify({'status': 'error', 'pesan': 'Terjadi kesalahan internal server'})
-
+        # Cetak error penuh ke log Docker secara instan
+        print(traceback.format_exc(), flush=True) 
+        
+        # Kirim error aslinya ke browser biar langsung ketahuan biang keroknya
+        return jsonify({'status': 'error', 'pesan': f'Error System: {str(e)}'})
+        
 @app.route('/admin/ambil_dataset/<int:user_id>')
 def view_ambil_dataset(user_id):
     if 'user_id' not in session or session['role'] != 'Admin': return redirect(url_for('index'))
