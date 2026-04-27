@@ -1,145 +1,188 @@
-{% extends "base.html" %}
-
-{% block content %}
+{% extends "base.html" %} {% block content %}
 <div class="container mt-4">
-    <div class="row justify-content-center">
-        <div class="col-md-8 text-center">
-            
-            <h4 class="fw-bold mb-3">Pengambilan Dataset: {{ nama_user }}</h4>
-            
-            <div class="card shadow-lg mb-4 bg-dark">
-                <div class="card-body p-1">
-                    <img src="{{ url_for('video_feed') }}" class="img-fluid rounded border border-2 border-secondary" width="100%">
-                </div>
-            </div>
+  <div class="row justify-content-center">
+    <div class="col-md-8 text-center">
+      <h4 class="fw-bold mb-3">Pengambilan Dataset: {{ nama_user }}</h4>
 
-            <div class="card shadow-sm">
-                <div class="card-body">
-                    <h5 id="instruksi" class="fw-bold text-primary mb-3">SIAP? Klik Tombol di Bawah</h5>
-                    
-                    <div class="progress mb-3" style="height: 25px;">
-                        <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-success" role="progressbar" style="width: 0%">0%</div>
-                    </div>
+      <div class="card shadow-lg mb-4 bg-dark">
+        <div class="card-body p-1">
+          <video id="video-webcam" autoplay playsinline width="100%"></video>
 
-                    <div id="btn-container">
-                        <button onclick="mulaiSesi(1)" class="btn btn-primary btn-lg w-100 mb-2">MULAI SESI 1: Wajah Datar</button>
-                    </div>
-                    
-                    <div id="status" class="text-muted small mt-2">Menunggu perintah...</div>
-                </div>
-            </div>
-            
-            <div class="mt-3">
-                <a href="/admin/users" class="btn btn-light">Kembali ke Kelola User</a>
-            </div>
-
+          <canvas id="canvas-foto" style="display: none"></canvas>
         </div>
+      </div>
+
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <h5 id="instruksi" class="fw-bold text-primary mb-3">
+            SIAP? Klik Tombol di Bawah
+          </h5>
+
+          <div class="progress mb-3" style="height: 25px">
+            <div
+              id="progressBar"
+              class="progress-bar progress-bar-striped progress-bar-animated bg-success"
+              role="progressbar"
+              style="width: 0%"
+            >
+              0%
+            </div>
+          </div>
+
+          <div id="btn-container">
+            <button
+              onclick="mulaiSesi(1)"
+              class="btn btn-primary btn-lg w-100 mb-2"
+            >
+              MULAI SESI 1: Wajah Datar
+            </button>
+          </div>
+
+          <div id="status" class="text-muted small mt-2">
+            Menunggu perintah...
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-3">
+        <a href="/admin/users" class="btn btn-light">Kembali ke Kelola User</a>
+      </div>
     </div>
+  </div>
 </div>
 
 <script>
-    // --- UPDATE SCRIPT YANG LEBIH STABIL ---
-    
-    // Pakai tanda kutip agar aman
-    let userId = parseInt("{{ user_id }}");
-    
-    let totalFoto = 0; // Urutan file (akan direset kalau sesi baru, atau lanjut terserah logika)
-    // Kita buat logic agar totalFoto melanjutkan file yang ada di folder nanti
-    // Tapi untuk simpelnya di sesi web, kita hitung global 1-80
-    
-    let countSesi = 0; // Target 20 per sesi
+  const video = document.getElementById("video-webcam");
 
-    // Daftar Instruksi
-    const sesiList = [
-        { id: 1, text: "Sesi 1: WAJAH DATAR", btnNext: "MULAI" },
-        { id: 2, text: "Sesi 2: WAJAH SENYUM", btnNext: "MULAI" },
-        { id: 3, text: "Sesi 3: WAJAH SERONG KIRI", btnNext: "MULAI" },
-        { id: 4, text: "Sesi 4: WAJAH SERONG KANAN", btnNext: "MULAI" }
-    ];
+  // Meminta izin akses webcam ke browser
+  navigator.mediaDevices
+    .getUserMedia({ video: true })
+    .then(function (stream) {
+      video.srcObject = stream;
+    })
+    .catch(function (err) {
+      console.error("Gagal mengakses kamera: ", err);
+      alert("Harap izinkan akses kamera di browser!");
+    });
+  // --- UPDATE SCRIPT YANG LEBIH STABIL ---
 
-    function mulaiSesi(nomorSesi) {
-        let config = sesiList[nomorSesi - 1];
-        document.getElementById("instruksi").innerText = "MEREKAM: " + config.text;
-        
-        // Matikan tombol biar gak diklik dobel
-        document.getElementById("btn-container").innerHTML = '<button class="btn btn-secondary disabled w-100">Sedang Merekam...</button>';
-        
-        countSesi = 0;
-        
-        // --- PERUBAHAN UTAMA: PANGGIL FUNGSI REKURSIF ---
-        ambilSatuFoto(nomorSesi); 
+  // Pakai tanda kutip agar aman
+  let userId = parseInt("{{ user_id }}");
+
+  let totalFoto = 0; // Urutan file (akan direset kalau sesi baru, atau lanjut terserah logika)
+  // Kita buat logic agar totalFoto melanjutkan file yang ada di folder nanti
+  // Tapi untuk simpelnya di sesi web, kita hitung global 1-80
+
+  let countSesi = 0; // Target 20 per sesi
+
+  // Daftar Instruksi
+  const sesiList = [
+    { id: 1, text: "Sesi 1: WAJAH DATAR", btnNext: "MULAI" },
+    { id: 2, text: "Sesi 2: WAJAH SENYUM", btnNext: "MULAI" },
+    { id: 3, text: "Sesi 3: WAJAH SERONG KIRI", btnNext: "MULAI" },
+    { id: 4, text: "Sesi 4: WAJAH SERONG KANAN", btnNext: "MULAI" },
+  ];
+
+  function mulaiSesi(nomorSesi) {
+    let config = sesiList[nomorSesi - 1];
+    document.getElementById("instruksi").innerText = "MEREKAM: " + config.text;
+
+    // Matikan tombol biar gak diklik dobel
+    document.getElementById("btn-container").innerHTML =
+      '<button class="btn btn-secondary disabled w-100">Sedang Merekam...</button>';
+
+    countSesi = 0;
+
+    // --- PERUBAHAN UTAMA: PANGGIL FUNGSI REKURSIF ---
+    ambilSatuFoto(nomorSesi);
+  }
+
+  function ambilSatuFoto(nomorSesi) {
+    // 1. TAMBAHKAN INI: Cek kondisi berhenti agar tidak loop terus menerus
+    if (countSesi >= 20) {
+      siapkanSesiBerikutnya(nomorSesi);
+      return;
     }
 
-    function ambilSatuFoto(nomorSesi) {
-        // Cek Stop Condition
-        if (countSesi >= 20) {
-            siapkanSesiBerikutnya(nomorSesi);
-            return;
-        }
+    // 2. TAMBAHKAN INI: Naikkan counter gambar agar nama file tidak tertimpa
+    totalFoto++;
 
-        totalFoto++; // Naikkan counter global
+    const canvas = document.getElementById("canvas-foto");
+    const context = canvas.getContext("2d");
 
-        fetch('/api/simpan_frame', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ user_id: userId, urutan: totalFoto })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if(data.status === 'success') {
-                countSesi++; // Hitung sukses
-                updateProgress();
-                document.getElementById("status").innerText = "Foto tersimpan: " + countSesi + "/20 (Total: " + totalFoto + ")";
-                
-                // --- REKURSIF: Panggil diri sendiri SETELAH sukses ---
-                // Kasih jeda dikit 200ms biar user sempat gerak/napas
-                setTimeout(() => {
-                    ambilSatuFoto(nomorSesi);
-                }, 200); 
-                
-            } else {
-                // Kalau gagal (misal wajah gak ketemu), jangan naikkan counter, tapi coba lagi
-                // Kurangi totalFoto karena file gagal disimpan
-                totalFoto--; 
-                document.getElementById("status").innerText = "Mencari wajah... (Pastikan wajah di kotak)";
-                
-                // Coba lagi langsung
-                setTimeout(() => {
-                    ambilSatuFoto(nomorSesi);
-                }, 100);
-            }
-        })
-        .catch(err => {
-            console.error(err);
-            // Kalau error jaringan, coba lagi
-            totalFoto--;
-            setTimeout(() => { ambilSatuFoto(nomorSesi); }, 500);
-        });
-    }
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    function updateProgress() {
-        // Progress per sesi saja biar enak dilihat (0-100% per sesi)
-        let persen = (countSesi / 20) * 100;
-        document.getElementById("progressBar").style.width = persen + "%";
-        document.getElementById("progressBar").innerText = Math.round(persen) + "%";
-    }
+    const imageData = canvas.toDataURL("image/jpeg");
 
-    function siapkanSesiBerikutnya(nomorSesi) {
-        if (nomorSesi < 4) {
-            let nextConfig = sesiList[nomorSesi]; 
-            document.getElementById("instruksi").innerText = "ISTIRAHAT SEBENTAR. SIAPKAN POSE BERIKUTNYA.";
-            document.getElementById("btn-container").innerHTML = 
-                `<button onclick="mulaiSesi(${nomorSesi + 1})" class="btn btn-warning btn-lg w-100 fw-bold">${nextConfig.btnNext}</button>`;
-            
-            // Reset Progress Bar visual
-            document.getElementById("progressBar").className = "progress-bar bg-warning";
+    fetch("/api/simpan_frame_base64", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_id: userId,
+        urutan: totalFoto,
+        image: imageData,
+      }),
+    })
+      .then((response) => response.json())
+      .then((data) => {
+        if (data.status === "success") {
+          countSesi++;
+          updateProgress();
+          document.getElementById("status").innerText =
+            "Foto tersimpan: " + countSesi + "/20 (Total: " + totalFoto + ")";
+
+          setTimeout(() => {
+            ambilSatuFoto(nomorSesi);
+          }, 200);
         } else {
-            document.getElementById("instruksi").innerText = "PENGAMBILAN DATA SELESAI!";
-            document.getElementById("instruksi").className = "fw-bold text-success mb-3";
-            document.getElementById("progressBar").className = "progress-bar bg-success";
-            document.getElementById("btn-container").innerHTML = 
-                `<a href="/admin/users" class="btn btn-success btn-lg w-100 fw-bold">KEMBALI & TRAINING MODEL</a>`;
+          // Gagal deteksi wajah, totalFoto diturunkan lagi biar penomoran pas
+          totalFoto--;
+          document.getElementById("status").innerText =
+            "Mencari wajah... (Pastikan wajah di kotak)";
+
+          setTimeout(() => {
+            ambilSatuFoto(nomorSesi);
+          }, 100);
         }
+      })
+      .catch((err) => {
+        console.error(err);
+        totalFoto--;
+        setTimeout(() => {
+          ambilSatuFoto(nomorSesi);
+        }, 500);
+      });
+  }
+  function updateProgress() {
+    // Progress per sesi saja biar enak dilihat (0-100% per sesi)
+    let persen = (countSesi / 20) * 100;
+    document.getElementById("progressBar").style.width = persen + "%";
+    document.getElementById("progressBar").innerText = Math.round(persen) + "%";
+  }
+
+  function siapkanSesiBerikutnya(nomorSesi) {
+    if (nomorSesi < 4) {
+      let nextConfig = sesiList[nomorSesi];
+      document.getElementById("instruksi").innerText =
+        "ISTIRAHAT SEBENTAR. SIAPKAN POSE BERIKUTNYA.";
+      document.getElementById("btn-container").innerHTML =
+        `<button onclick="mulaiSesi(${nomorSesi + 1})" class="btn btn-warning btn-lg w-100 fw-bold">${nextConfig.btnNext}</button>`;
+
+      // Reset Progress Bar visual
+      document.getElementById("progressBar").className =
+        "progress-bar bg-warning";
+    } else {
+      document.getElementById("instruksi").innerText =
+        "PENGAMBILAN DATA SELESAI!";
+      document.getElementById("instruksi").className =
+        "fw-bold text-success mb-3";
+      document.getElementById("progressBar").className =
+        "progress-bar bg-success";
+      document.getElementById("btn-container").innerHTML =
+        `<a href="/admin/users" class="btn btn-success btn-lg w-100 fw-bold">KEMBALI & TRAINING MODEL</a>`;
     }
+  }
 </script>
 {% endblock %}

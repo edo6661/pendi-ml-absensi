@@ -1,3 +1,4 @@
+kode nyaa:
 
 <file path="templates/index.html">
 {% extends "base.html" %}

@@ -89,6 +89,53 @@ def hitung_jarak(lat1, lon1, lat2, lon2):
 
 # --- FITUR DATASET WEB ---
 
+@app.route('/api/simpan_frame_base64', methods=['POST'])
+def simpan_frame_base64():
+    data = request.json
+    user_id = data.get('user_id')
+    urutan = data.get('urutan')
+    image_data = data.get('image')
+
+    if not image_data:
+        return jsonify({'status': 'error', 'pesan': 'Tidak ada gambar dari client'})
+
+    try:
+        # 1. Pisahkan header base64 (contoh: "data:image/jpeg;base64,/9j/4AAQ...")
+        encoded_data = image_data.split(',')[1]
+        
+        # 2. Decode base64 menjadi array numpy
+        nparr = np.frombuffer(base64.b64decode(encoded_data), np.uint8)
+        
+        # 3. Ubah array numpy menjadi format gambar OpenCV (BGR)
+        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+        # 4. Deteksi Wajah (Pastikan path haarcascade sesuai dengan foldermu)
+        face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.3, minNeighbors=5)
+
+        if len(faces) == 0:
+            return jsonify({'status': 'error', 'pesan': 'Wajah tidak ditemukan'})
+
+        # 5. Jika wajah ketemu, crop dan simpan dataset
+        for (x, y, w, h) in faces:
+            wajah_crop = gray[y:y+h, x:x+w]
+            
+            # Tentukan folder dataset
+            folder_path = f"dataset/{user_id}" # Sesuaikan dengan nama folder dataset kamu
+            os.makedirs(folder_path, exist_ok=True)
+            
+            # Simpan file gambar
+            file_name = f"{folder_path}/User.{user_id}.{urutan}.jpg"
+            cv2.imwrite(file_name, wajah_crop)
+            break # Cukup ambil 1 wajah pertama yang terdeteksi
+
+        return jsonify({'status': 'success', 'pesan': 'Foto berhasil disimpan'})
+
+    except Exception as e:
+        print("Error saving base64 image:", str(e))
+        return jsonify({'status': 'error', 'pesan': 'Terjadi kesalahan internal server'})
+
 @app.route('/admin/ambil_dataset/<int:user_id>')
 def view_ambil_dataset(user_id):
     if 'user_id' not in session or session['role'] != 'Admin': return redirect(url_for('index'))
