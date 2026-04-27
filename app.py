@@ -7,6 +7,8 @@ from datetime import datetime
 from werkzeug.utils import secure_filename
 import numpy as np 
 from PIL import Image
+import base64        
+import traceback     
 
 # Variabel Global untuk menyimpan frame terakhir
 global_frame = None
