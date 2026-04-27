@@ -22,7 +22,7 @@ app.secret_key = 'rahasia_skripsi_pendi' # Kunci untuk Session & Flash
 DB_NAME = "skripsi_db"
 DB_USER = "postgres"
 DB_PASS = "12345"  
-DB_HOST = "localhost"
+DB_HOST = "db"
 
 # --- DATABASE CONNECTION ---
 def get_db_connection():
