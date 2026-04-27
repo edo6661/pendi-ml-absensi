@@ -64,15 +64,11 @@
       console.error("Gagal mengakses kamera: ", err);
       alert("Harap izinkan akses kamera di browser!");
     });
-  // --- UPDATE SCRIPT YANG LEBIH STABIL ---
 
   // Pakai tanda kutip agar aman
   let userId = parseInt("{{ user_id }}");
 
-  let totalFoto = 0; // Urutan file (akan direset kalau sesi baru, atau lanjut terserah logika)
-  // Kita buat logic agar totalFoto melanjutkan file yang ada di folder nanti
-  // Tapi untuk simpelnya di sesi web, kita hitung global 1-80
-
+  let totalFoto = 0;
   let countSesi = 0; // Target 20 per sesi
 
   // Daftar Instruksi
@@ -93,23 +89,32 @@
 
     countSesi = 0;
 
-    // --- PERUBAHAN UTAMA: PANGGIL FUNGSI REKURSIF ---
+    // Mulai proses rekursif
     ambilSatuFoto(nomorSesi);
   }
 
   function ambilSatuFoto(nomorSesi) {
-    // 1. TAMBAHKAN INI: Cek kondisi berhenti agar tidak loop terus menerus
+    // 1. Cek kondisi berhenti agar tidak loop terus menerus
     if (countSesi >= 20) {
       siapkanSesiBerikutnya(nomorSesi);
       return;
     }
 
-    // 2. TAMBAHKAN INI: Naikkan counter gambar agar nama file tidak tertimpa
+    // 2. PENGECEKAN KAMERA SIAP (Mencegah gambar hitam/kosong terkirim)
+    if (video.videoWidth === 0 || video.videoHeight === 0) {
+      document.getElementById("status").innerText =
+        "Menunggu kamera siap/fokus...";
+      setTimeout(() => ambilSatuFoto(nomorSesi), 500); // Coba lagi dalam setengah detik
+      return;
+    }
+
+    // 3. Naikkan counter gambar agar nama file tidak tertimpa
     totalFoto++;
 
     const canvas = document.getElementById("canvas-foto");
     const context = canvas.getContext("2d");
 
+    // Ambil ukuran asli dari video stream
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -140,7 +145,7 @@
           // Gagal deteksi wajah, totalFoto diturunkan lagi biar penomoran pas
           totalFoto--;
           document.getElementById("status").innerText =
-            "Mencari wajah... (Pastikan wajah di kotak)";
+            "Mencari wajah... (Pastikan wajah di kotak terang)";
 
           setTimeout(() => {
             ambilSatuFoto(nomorSesi);
@@ -155,8 +160,8 @@
         }, 500);
       });
   }
+
   function updateProgress() {
-    // Progress per sesi saja biar enak dilihat (0-100% per sesi)
     let persen = (countSesi / 20) * 100;
     document.getElementById("progressBar").style.width = persen + "%";
     document.getElementById("progressBar").innerText = Math.round(persen) + "%";
@@ -170,7 +175,6 @@
       document.getElementById("btn-container").innerHTML =
         `<button onclick="mulaiSesi(${nomorSesi + 1})" class="btn btn-warning btn-lg w-100 fw-bold">${nextConfig.btnNext}</button>`;
 
-      // Reset Progress Bar visual
       document.getElementById("progressBar").className =
         "progress-bar bg-warning";
     } else {
