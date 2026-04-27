@@ -117,14 +117,24 @@ def simpan_frame_base64():
         # Cek apakah file xml haarcascade benar-benar ada di dalam Docker
         if face_cascade.empty():
             return jsonify({'status': 'error', 'pesan': 'File Haarcascade XML tidak ditemukan di VPS!'})
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        
+        # --- TAMBAHAN DEBUGGING ---
+        # Simpan 1 gambar mentah utuh ke root folder untuk kita intip nanti
+        cv2.imwrite("debug_kamera_server.jpg", frame) 
+        # --------------------------
 
-        # 3. Deteksi Wajah
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.3, minNeighbors=5)
+        # PERBAIKAN PARAMETER: Lebih sensitif dan teliti
+        faces = face_cascade.detectMultiScale(
+            gray, 
+            scaleFactor=1.1,   # Diubah dari 1.3 jadi 1.1 (lebih teliti mendeteksi wajah)
+            minNeighbors=4,    # Diubah dari 5 jadi 4 (syarat kepastian wajah diturunkan sedikit)
+            minSize=(50, 50)   # Abaikan objek kecil (noise)
+        )
 
         if len(faces) == 0:
             return jsonify({'status': 'error', 'pesan': 'Wajah tidak ditemukan'})
-
+            
         # 4. Potong dan Simpan
         for (x, y, w, h) in faces:
             wajah_crop = gray[y:y+h, x:x+w]
