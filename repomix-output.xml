@@ -1,7 +1,11 @@
-saat mencet tombol:
-SIAP? Klik Tombol di Bawah
-<tombol> MULAI SESI 1: Wajah Datar </tombol>
-Menunggu perintah...
+saat saya selesai pengambilan dataset:
+Pengambilan Dataset: Ridho
+sudah capture capture banyak, setelah itu saya klik training model sekarang malah error gini:
+Data dataset kosong atau format nama file salah! Tidak bisa training.
+
+gimana ya solusinya?
+
+ini saya jalanin di vps docker
 <file path="templates/index.html">
 {% extends "base.html" %}
 
@@ -854,7 +858,6 @@ Menunggu perintah...
       <div class="card shadow-lg mb-4 bg-dark">
         <div class="card-body p-1">
           <video id="video-webcam" autoplay playsinline width="100%"></video>
-
           <canvas id="canvas-foto" style="display: none"></canvas>
         </div>
       </div>
@@ -912,9 +915,7 @@ Menunggu perintah...
       alert("Harap izinkan akses kamera di browser!");
     });
 
-  // Pakai tanda kutip agar aman
   let userId = parseInt("{{ user_id }}");
-
   let totalFoto = 0;
   let countSesi = 0; // Target 20 per sesi
 
@@ -930,43 +931,38 @@ Menunggu perintah...
     let config = sesiList[nomorSesi - 1];
     document.getElementById("instruksi").innerText = "MEREKAM: " + config.text;
 
-    // Matikan tombol biar gak diklik dobel
     document.getElementById("btn-container").innerHTML =
       '<button class="btn btn-secondary disabled w-100">Sedang Merekam...</button>';
 
     countSesi = 0;
-
-    // Mulai proses rekursif
     ambilSatuFoto(nomorSesi);
   }
 
   function ambilSatuFoto(nomorSesi) {
-    // 1. Cek kondisi berhenti agar tidak loop terus menerus
     if (countSesi >= 20) {
       siapkanSesiBerikutnya(nomorSesi);
       return;
     }
 
-    // 2. PENGECEKAN KAMERA SIAP (Mencegah gambar hitam/kosong terkirim)
     if (video.videoWidth === 0 || video.videoHeight === 0) {
       document.getElementById("status").innerText =
         "Menunggu kamera siap/fokus...";
-      setTimeout(() => ambilSatuFoto(nomorSesi), 500); // Coba lagi dalam setengah detik
+      setTimeout(() => ambilSatuFoto(nomorSesi), 500);
       return;
     }
 
-    // 3. Naikkan counter gambar agar nama file tidak tertimpa
     totalFoto++;
 
     const canvas = document.getElementById("canvas-foto");
     const context = canvas.getContext("2d");
 
-    // Ambil ukuran asli dari video stream
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    const imageData = canvas.toDataURL("image/jpeg");
+    // MENGHAPUS HEADER BASE64 SEBELUM DIKIRIM KE PYTHON
+    const rawData = canvas.toDataURL("image/jpeg");
+    const imageData = rawData.split(",")[1];
 
     fetch("/api/simpan_frame_base64", {
       method: "POST",
@@ -985,18 +981,19 @@ Menunggu perintah...
           document.getElementById("status").innerText =
             "Foto tersimpan: " + countSesi + "/20 (Total: " + totalFoto + ")";
 
+          // Jeda sedikit lebih lama (500ms) agar server aman
           setTimeout(() => {
             ambilSatuFoto(nomorSesi);
-          }, 200);
+          }, 500);
         } else {
-          // Gagal deteksi wajah, totalFoto diturunkan lagi biar penomoran pas
           totalFoto--;
           document.getElementById("status").innerText =
             "Mencari wajah... (Pastikan wajah di kotak terang)";
 
+          // Jeda diperlama jadi 1.5 detik jika error, agar server tidak spamming error
           setTimeout(() => {
             ambilSatuFoto(nomorSesi);
-          }, 100);
+          }, 1500);
         }
       })
       .catch((err) => {
@@ -1004,7 +1001,7 @@ Menunggu perintah...
         totalFoto--;
         setTimeout(() => {
           ambilSatuFoto(nomorSesi);
-        }, 500);
+        }, 1500);
       });
   }
 
@@ -1040,3 +1037,223 @@ Menunggu perintah...
 </file>
 
 </files>
+
+docker-compose.yml:
+services:
+  app:
+    build: .
+    container_name: presensi-ai-web
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Jakarta
+      # Host diarahkan ke nama container database
+      - DB_HOST=db
+      - DB_NAME=skripsi_db
+      - DB_USER=postgres
+      - DB_PASS=12345
+    depends_on:
+      - db
+    networks:
+      - proxy-network
+      - presensi-internal
+
+  db:
+    image: postgres:15-alpine
+    container_name: presensi-ai-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: skripsi_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 12345
+      TZ: Asia/Jakarta
+    volumes:
+      - presensi_db_data:/var/lib/postgresql/data
+    networks:
+      - presensi-internal
+
+networks:
+  proxy-network:
+    external: true
+  presensi-internal:
+    driver: bridge
+
+volumes:
+  presensi_db_data:
+
+
+Dockerfile:
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# Install system dependencies untuk OpenCV, dlib, dan PostgreSQL
+RUN apt-get update && apt-get install -y \
+    cmake \
+    build-essential \
+    libgl1 \
+    libglib2.0-0 \
+    tzdata \
+    libpq-dev \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV TZ=Asia/Jakarta
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+EXPOSE 5000
+
+CMD ["python", "app.py"]
+
+
+ ✔ Network ml-absensi-global_presensi-internal Removed                                                                                                            0.2s
+edo@srv1467861:~/apps/ml-absensi-global$ docker compose up -d --build
+[+] Building 2.2s (13/13) FINISHED
+ => [internal] load local bake definitions                                                                                                                       0.0s
+ => => reading from stdin 524B                                                                                                                                   0.0s
+ => [internal] load build definition from Dockerfile                                                                                                             0.0s
+ => => transferring dockerfile: 469B                                                                                                                             0.0s
+ => [internal] load metadata for docker.io/library/python:3.10-slim                                                                                              1.1s
+ => [internal] load .dockerignore                                                                                                                                0.0s
+ => => transferring context: 2B                                                                                                                                  0.0s
+ => [1/6] FROM docker.io/library/python:3.10-slim@sha256:cdbf8193cee2e31639ea8ea85ffdd8fa5cce98ee9abfde96ea5f329490048831                                        0.1s
+ => => resolve docker.io/library/python:3.10-slim@sha256:cdbf8193cee2e31639ea8ea85ffdd8fa5cce98ee9abfde96ea5f329490048831                                        0.0s
+ => [internal] load build context                                                                                                                                0.0s
+ => => transferring context: 369.34kB                                                                                                                            0.0s
+ => CACHED [2/6] WORKDIR /app                                                                                                                                    0.0s
+ => CACHED [3/6] RUN apt-get update && apt-get install -y     cmake     build-essential     libgl1     libglib2.0-0     tzdata     libpq-dev     gcc     && rm   0.0s
+ => CACHED [4/6] COPY requirements.txt .                                                                                                                         0.0s
+ => CACHED [5/6] RUN pip install --no-cache-dir -r requirements.txt                                                                                              0.0s
+ => [6/6] COPY . .                                                                                                                                               0.1s
+ => exporting to image                                                                                                                                           0.6s
+ => => exporting layers                                                                                                                                          0.3s
+ => => exporting manifest sha256:5dcd6fcfb83675fc8e830bf4301c983bbc862f16bbbaef7fb2a7af47e74dfc9a                                                                0.0s
+ => => exporting config sha256:8b9ec2db6a1735cf13897c0a4f5a76e992fe7b57e89533379755ddfdff46f084                                                                  0.0s
+ => => exporting attestation manifest sha256:59cee9c75bc9fb9a6e1808ecb5055ccf217b213ad4e4f7dd4d10267a9ba33951                                                    0.0s
+ => => exporting manifest list sha256:777d9476cc4431d799c40f7143b0fc2eaf26f928f3e3303aedf282fcb667a044                                                           0.0s
+ => => naming to docker.io/library/ml-absensi-global-app:latest                                                                                                  0.0s
+ => => unpacking to docker.io/library/ml-absensi-global-app:latest                                                                                               0.2s
+ => resolving provenance for metadata file                                                                                                                       0.0s
+[+] up 4/4
+ ✔ Image ml-absensi-global-app                 Built                                                                                                              2.3s
+ ✔ Network ml-absensi-global_presensi-internal Created                                                                                                            0.0s
+ ✔ Container presensi-ai-db                    Started                                                                                                            0.3s
+ ✔ Container presensi-ai-web                   Started                                                                                                            0.4s
+edo@srv1467861:~/apps/ml-absensi-global$
+
+```
+└── 📁ml-absen
+    └── 📁__pycache__
+        ├── app.cpython-314.pyc
+    └── 📁dataset
+    └── 📁static
+        └── 📁uploads
+            ├── izin_1_pinterest.jpg
+            ├── izin_2_pinterest.jpg
+            ├── izin_4_pinterest.jpg
+    └── 📁templates
+        ├── admin_dashboard.html
+        ├── ambil_dataset.html
+        ├── base.html
+        ├── dashboard.html
+        ├── index.html
+        ├── izin.html
+        ├── kelola_users.html
+        ├── laporan.html
+        ├── riwayat.html
+    └── 📁trainer
+    ├── ambil_dataset.py
+    ├── app.py
+    ├── cek_kolom.py
+    ├── database.py
+    ├── docker-compose.yml
+    ├── Dockerfile
+    ├── kamera.py
+    ├── kenali_wajah.py
+    ├── latih_wajah.py
+    ├── repomix-output.xml
+    ├── requirements.txt
+    ├── setup_database_final.py
+    ├── tes_api.py
+    ├── tes_upload.py
+    └── tes_wajah.jpg
+```
+
+
+edo@srv1467861:~/apps/ml-absensi-global$ # Membuat folder model jika belum ada
+mkdir -p static/model
+mkdir -p static/dataset
+
+# Memberikan hak akses baca & tulis (Read & Write) ke folder static
+sudo chmod -R 777 static/
+[sudo] password for edo:
+Sorry, try again.
+[sudo] password for edo:
+edo@srv1467861:~/apps/ml-absensi-global$ sudo chmod -R 777 static/
+edo@srv1467861:~/apps/ml-absensi-global$ docker compose ps
+NAME              IMAGE                   COMMAND                  SERVICE   CREATED         STATUS         PORTS
+presensi-ai-db    postgres:15-alpine      "docker-entrypoint.s…"   db        4 minutes ago   Up 4 minutes   5432/tcp
+presensi-ai-web   ml-absensi-global-app   "python app.py"          app       4 minutes ago   Up 4 minutes   5000/tcp
+edo@srv1467861:~/apps/ml-absensi-global$ docker compose restart presensi-ai-web
+no such service: presensi-ai-web
+edo@srv1467861:~/apps/ml-absensi-global$ docker compose restart presensi-ai-web
+no such service: presensi-ai-web
+edo@srv1467861:~/apps/ml-absensi-global$
+edo@srv1467861:~/apps/ml-absensi-global$ docker compose restart app
+[+] restart 0/1
+ ⠧ Container presensi-ai-web Restarting                                                                                                                           0.7s
+edo@srv1467861:~/apps/ml-absensi-global$ docker restart presensi-ai-web
+presensi-ai-web
+edo@srv1467861:~/apps/ml-absensi-global$ git pull
+remote: Enumerating objects: 5, done.
+remote: Counting objects: 100% (5/5), done.
+remote: Compressing objects: 100% (1/1), done.
+remote: Total 3 (delta 2), reused 3 (delta 2), pack-reused 0 (from 0)
+Unpacking objects: 100% (3/3), 760 bytes | 380.00 KiB/s, done.
+From https://github.com/edo6661/pendi-ml-absensi
+   ebd97bb..5387fdb  main       -> origin/main
+Updating ebd97bb..5387fdb
+Fast-forward
+ app.py | 29 ++++++++++++++++++++++-------
+ 1 file changed, 22 insertions(+), 7 deletions(-)
+edo@srv1467861:~/apps/ml-absensi-global$ docker compose down
+[+] down 3/3
+ ✔ Container presensi-ai-web                   Removed                                                                                                            0.3s
+ ✔ Container presensi-ai-db                    Removed                                                                                                            0.3s
+ ✔ Network ml-absensi-global_presensi-internal Removed                                                                                                            0.2s
+edo@srv1467861:~/apps/ml-absensi-global$ docker compose up -d --build
+[+] Building 2.2s (13/13) FINISHED
+ => [internal] load local bake definitions                                                                                                                       0.0s
+ => => reading from stdin 524B                                                                                                                                   0.0s
+ => [internal] load build definition from Dockerfile                                                                                                             0.0s
+ => => transferring dockerfile: 469B                                                                                                                             0.0s
+ => [internal] load metadata for docker.io/library/python:3.10-slim                                                                                              1.1s
+ => [internal] load .dockerignore                                                                                                                                0.0s
+ => => transferring context: 2B                                                                                                                                  0.0s
+ => [1/6] FROM docker.io/library/python:3.10-slim@sha256:cdbf8193cee2e31639ea8ea85ffdd8fa5cce98ee9abfde96ea5f329490048831                                        0.1s
+ => => resolve docker.io/library/python:3.10-slim@sha256:cdbf8193cee2e31639ea8ea85ffdd8fa5cce98ee9abfde96ea5f329490048831                                        0.0s
+ => [internal] load build context                                                                                                                                0.0s
+ => => transferring context: 369.34kB                                                                                                                            0.0s
+ => CACHED [2/6] WORKDIR /app                                                                                                                                    0.0s
+ => CACHED [3/6] RUN apt-get update && apt-get install -y     cmake     build-essential     libgl1     libglib2.0-0     tzdata     libpq-dev     gcc     && rm   0.0s
+ => CACHED [4/6] COPY requirements.txt .                                                                                                                         0.0s
+ => CACHED [5/6] RUN pip install --no-cache-dir -r requirements.txt                                                                                              0.0s
+ => [6/6] COPY . .                                                                                                                                               0.1s
+ => exporting to image                                                                                                                                           0.6s
+ => => exporting layers                                                                                                                                          0.3s
+ => => exporting manifest sha256:5dcd6fcfb83675fc8e830bf4301c983bbc862f16bbbaef7fb2a7af47e74dfc9a                                                                0.0s
+ => => exporting config sha256:8b9ec2db6a1735cf13897c0a4f5a76e992fe7b57e89533379755ddfdff46f084                                                                  0.0s
+ => => exporting attestation manifest sha256:59cee9c75bc9fb9a6e1808ecb5055ccf217b213ad4e4f7dd4d10267a9ba33951                                                    0.0s
+ => => exporting manifest list sha256:777d9476cc4431d799c40f7143b0fc2eaf26f928f3e3303aedf282fcb667a044                                                           0.0s
+ => => naming to docker.io/library/ml-absensi-global-app:latest                                                                                                  0.0s
+ => => unpacking to docker.io/library/ml-absensi-global-app:latest                                                                                               0.2s
+ => resolving provenance for metadata file                                                                                                                       0.0s
+[+] up 4/4
+ ✔ Image ml-absensi-global-app                 Built                                                                                                              2.3s
+ ✔ Network ml-absensi-global_presensi-internal Created                                                                                                            0.0s
+ ✔ Container presensi-ai-db                    Started                                                                                                            0.3s
+ ✔ Container presensi-ai-web                   Started                                                                                                            0.4s
+edo@srv1467861:~/apps/ml-absensi-global$

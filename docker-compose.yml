@@ -5,17 +5,19 @@ services:
     restart: unless-stopped
     environment:
       - TZ=Asia/Jakarta
-      # Host diarahkan ke nama container database
       - DB_HOST=db
       - DB_NAME=skripsi_db
       - DB_USER=postgres
       - DB_PASS=12345
+    volumes:
+      - ./dataset:/app/dataset
+      - ./static/uploads:/app/static/uploads
+      - ./static/model:/app/static/model
     depends_on:
       - db
     networks:
       - proxy-network
       - presensi-internal
-
   db:
     image: postgres:15-alpine
     container_name: presensi-ai-db
@@ -29,12 +31,10 @@ services:
       - presensi_db_data:/var/lib/postgresql/data
     networks:
       - presensi-internal
-
 networks:
   proxy-network:
     external: true
   presensi-internal:
     driver: bridge
-
 volumes:
   presensi_db_data:
